@@ -40,8 +40,9 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 	defer conn.Close()
 	for {
 
-		for i := 0; buf[i] != 0; i++ {
+		for i := 0; i < 255; i++ {
 			buf[i] = 0
+			friend_buf[i] = 0
 		}
 
 		//fmt.Println(username)
@@ -69,8 +70,9 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 			if ok {
 				conn.Write([]byte("This username already exists. Please, enter different one:\n>"))
 
-			} else if strings.Contains(username, " ") {
-				conn.Write([]byte("Please, do not use the space:\n>"))
+			} else if strings.Contains(username, " ") || strings.Contains(username, ",") || strings.Contains(username, ".") || strings.Contains(username, "!") || strings.Contains(username, "?") {
+				//fmt.Println(buf)
+				conn.Write([]byte("Used the forbidden symbol:\n>"))
 			} else {
 				conn.Write([]byte("Username accepted. \n"))
 				fmt.Println(username)
@@ -100,7 +102,7 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 					if buf[i] == 64 {
 						i++
 						j := 0
-						for buf[i] != 13 && buf[i] != 32 {
+						for buf[i] != 13 && buf[i] != 32 && buf[i] != 33 && buf[i] != 63 && buf[i] != 46 && buf[i] != 44 {
 							friend_buf[j] = buf[i]
 							j++
 							i++

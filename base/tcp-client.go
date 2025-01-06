@@ -74,7 +74,7 @@ func main() {
 		panic("Connection is nil")
 
 	}
-	fmt.Print("Firstly, enter your username, please: \nInstead of ' ' use '_'\n>")
+	fmt.Print("Firstly, enter your username, please: \nDo not use the ' ', '!', '?', '.', ','\n>")
 
 	go readConsole(ch)
 	go readSock(conn)
