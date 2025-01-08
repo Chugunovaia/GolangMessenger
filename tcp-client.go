@@ -2,9 +2,15 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/curve25519"
 	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -107,6 +113,55 @@ func findKey(mes []byte) (key [32]byte) {
 	return
 }
 
+// encryptString takes a plaintext string and a key, and returns the encrypted data in base64.
+func encryptString(plaintext string, key []byte) (string, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	// The IV needs to be unique, but not secure. Therefore it's common to include it at the beginning of the ciphertext.
+	// IV length should be equal to block size.
+	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return "", err
+	}
+
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], []byte(plaintext))
+
+	// Convert the bytes to a base64 encoded string
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// decryptString takes a base64 encoded string and a key, and returns the decrypted plaintext.
+func decryptString(encrypted string, key []byte) (string, error) {
+	ciphertext, err := base64.StdEncoding.DecodeString(encrypted)
+	if err != nil {
+		return "", err
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	if len(ciphertext) < aes.BlockSize {
+		return "", fmt.Errorf("ciphertext too short")
+	}
+	iv := ciphertext[:aes.BlockSize]
+	ciphertext = ciphertext[aes.BlockSize:]
+
+	stream := cipher.NewCFBDecrypter(block, iv)
+
+	// Decrypt the ciphertext
+	plaintext := make([]byte, len(ciphertext))
+	stream.XORKeyStream(plaintext, ciphertext)
+
+	return string(plaintext), nil
+}
+
 // прием данных из сокета и вывод на печать
 func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_priv [32]byte, my_pub [32]byte) {
 
@@ -153,11 +208,21 @@ func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_pri
 				}
 
 			} else if line[0] == '@' {
-
 				var zero_buf [32]byte
 				name, mes := redMes(line)
+				var l byte = 0
+				mes = bytes.Trim(mes, string(l))
+				fmt.Println(mes)
 				_, ok := codes[name]
 				if ok && codes[name] != zero_buf {
+					key := make([]byte, 32)
+					op := codes[name]
+					copy(key[:], op[:])
+					dop_line, err_d := decryptString(string(mes[:]), key)
+					if err_d != nil {
+						panic(err_d)
+					}
+					line = dop_line
 
 				} else {
 
@@ -218,6 +283,17 @@ func readConsole(ch chan string, codes map[[32]byte][32]byte, my_pub [32]byte) {
 			_, ok := codes[friend]
 			if ok {
 				//шифрование
+				key := make([]byte, 32)
+				op := codes[friend]
+				copy(key[:], op[:])
+				dop_line, err_d := encryptString(line, key)
+				if err_d != nil {
+					panic(err_d)
+				}
+				fmt.Println([]byte(dop_line))
+
+				line = createMes(string(friend[:]), dop_line)
+
 			} else { //сообщение в виде @user(пробел=32)<сообщение(10)><публичный ключ>
 				var zero_buf [32]byte
 				codes[friend] = zero_buf
