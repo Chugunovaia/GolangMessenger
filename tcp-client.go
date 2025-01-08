@@ -52,7 +52,7 @@ func createMes(user string, line string) (out string) {
 	buf := make([]byte, 256)
 	buf[0] = 64
 	i := 0
-	//fmt.Println(len(user))
+
 	for i < len(user) && user[i] != 0 {
 		buf[i+1] = user[i]
 		i++
@@ -62,9 +62,9 @@ func createMes(user string, line string) (out string) {
 	i++
 	buf[i] = 33
 	i++
-	//fmt.Println(buf)
+
 	for j := 0; j < len(line) && line[j] != 13 && line[j] != 0; j++ {
-		//	fmt.Println(line[j])
+
 		buf[i] = line[j]
 		i++
 	}
@@ -72,8 +72,7 @@ func createMes(user string, line string) (out string) {
 		buf[i] = 13
 		buf[i+1] = 10
 	}
-	//fmt.Println(buf)
-	//fmt.Println(buf)
+
 	out = string(buf)
 
 	return
@@ -96,19 +95,20 @@ func redMes(line string) (name [32]byte, mes []byte) {
 }
 func findKey(mes []byte) (key [32]byte) {
 	i := 0
+
 	for i < len(mes) && mes[i] != 10 {
 		i++
 	}
 	i++
 	if i < len(mes) {
 		j := 0
-		for i < len(mes) && mes[i] != 0 {
+		for i < len(mes) && j < 32 {
 			key[j] = mes[i]
 			i++
 			j++
 
 		}
-		//fmt.Println(key)
+
 	}
 	return
 }
@@ -212,29 +212,25 @@ func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_pri
 				name, mes := redMes(line)
 				var l byte = 0
 				mes = bytes.Trim(mes, string(l))
-				fmt.Println(mes)
+
 				_, ok := codes[name]
 				if ok && codes[name] != zero_buf {
 					key := make([]byte, 32)
 					op := codes[name]
 					copy(key[:], op[:])
+
 					dop_line, err_d := decryptString(string(mes[:]), key)
 					if err_d != nil {
 						panic(err_d)
 					}
-					line = dop_line
+					line = "@" + string(name[:]) + " ->>" + dop_line
 
 				} else {
 
-					//codes[name]:=
-					//fmt.Println("HERE")
-
 					their_key := findKey(mes)
-					//fmt.Println(their_key)
-					//fmt.Println([]byte(line))
-					//fmt.Println(buf)
+
 					shared_key := createSharedKey(their_key, my_priv)
-					//fmt.Println(shared_key)
+
 					codes[name] = shared_key
 
 					i := 0
@@ -251,13 +247,11 @@ func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_pri
 						var dop string
 						dop = "\n" + string(my_pub[:])
 						mes := createMes(string(name[:]), dop)
-						//	fmt.Println(mes)
+
 						ch <- mes
-						//	fmt.Println(buf)
-						//	fmt.Println(line)
 
 					}
-					//fmt.Println(codes[name])
+
 				}
 
 			}
@@ -275,8 +269,7 @@ func readConsole(ch chan string, codes map[[32]byte][32]byte, my_pub [32]byte) {
 			fmt.Println("Error: message is very lagre")
 			continue
 		}
-		//		b := []byte(line)
-		//		fmt.Print(b)
+
 		ind := strings.Index(line, "@")
 		if ind != -1 { //кому-то
 			friend := findName(line, ind)
@@ -286,11 +279,12 @@ func readConsole(ch chan string, codes map[[32]byte][32]byte, my_pub [32]byte) {
 				key := make([]byte, 32)
 				op := codes[friend]
 				copy(key[:], op[:])
+
 				dop_line, err_d := encryptString(line, key)
+
 				if err_d != nil {
 					panic(err_d)
 				}
-				fmt.Println([]byte(dop_line))
 
 				line = createMes(string(friend[:]), dop_line)
 
@@ -315,15 +309,14 @@ func readConsole(ch chan string, codes map[[32]byte][32]byte, my_pub [32]byte) {
 				}
 
 				a := string(bbuf[:])
-				//fmt.Println(my_pub)
+
 				line = createMes(string(friend[:]), a)
-				//				fmt.Println([]byte(line))
 
 			}
 		}
 
 		out := line //[:len(line)-1] // убираем символ возврата каретки
-		//		fmt.Println([]byte(out))
+
 		ch <- out // отправляем данные в канал
 	}
 }
