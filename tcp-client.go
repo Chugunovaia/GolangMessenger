@@ -2,14 +2,13 @@ package main
 
 import (
 	"bufio"
+	"crypto/curve25519"
 	"crypto/ed25519"
 	"fmt"
 	"net"
 	"os"
 	"strings"
 	"time"
-
-	"crypto/curve25519"
 )
 
 func createKeys() (my_publicKey [32]byte, my_privateKey [32]byte) { //создаем личные ключи
@@ -21,10 +20,8 @@ func createKeys() (my_publicKey [32]byte, my_privateKey [32]byte) { //созда
 	copy(my_publicKey[:], pub[:])
 	copy(my_privateKey[:], priv[:])
 	curve25519.ScalarBaseMult(&my_publicKey, &my_privateKey) //домножаем, чтобы потом можно было получить общий ключ
-	fmt.Println("KEYS", err)
 	return
 }
-
 func createSharedKey(their_publicKey [32]byte, my_privateKey [32]byte) [32]byte {
 	var pubKey, privKey, secret [32]byte
 	copy(pubKey[:], their_publicKey[:])
@@ -32,23 +29,96 @@ func createSharedKey(their_publicKey [32]byte, my_privateKey [32]byte) [32]byte 
 	curve25519.ScalarMult(&secret, &privKey, &pubKey) //общий ключ, он будет одинаковым у двоих пользователей благодаря ScalarBaseMult
 	return secret
 }
+func findName(line string, ind int) (name [32]byte) {
+	i := ind + 1
+	j := 0
+
+	for i < (len(line)) && (j < 32) && (line[i] != 13) && (line[i] != 10) && (line[i] != 32) && (line[i] != 33) && (line[i] != 63) && (line[i] != 46) && (line[i] != 44) {
+		name[j] = line[i]
+
+		j++
+		i++
+	}
+
+	return
+}
+func createMes(user string, line string) (out string) {
+	buf := make([]byte, 256)
+	buf[0] = 64
+	i := 0
+	//fmt.Println(len(user))
+	for i < len(user) && user[i] != 0 {
+		buf[i+1] = user[i]
+		i++
+	}
+	i++
+	buf[i] = 32
+	i++
+	buf[i] = 33
+	i++
+	//fmt.Println(buf)
+	for j := 0; j < len(line) && line[j] != 13 && line[j] != 0; j++ {
+		//	fmt.Println(line[j])
+		buf[i] = line[j]
+		i++
+	}
+	if i < 255 {
+		buf[i] = 13
+		buf[i+1] = 10
+	}
+	//fmt.Println(buf)
+	//fmt.Println(buf)
+	out = string(buf)
+
+	return
+}
+func redMes(line string) (name [32]byte, mes []byte) {
+	ind := 0
+	name = findName(line, ind)
+
+	ind = strings.Index(line, "!")
+
+	mes = make([]byte, 256)
+	j := 0
+
+	for i := ind + 1; i < len(line) && line[i] != 13; i++ {
+		mes[j] = line[i]
+		j++
+	}
+
+	return
+}
+func findKey(mes []byte) (key [32]byte) {
+	i := 0
+	for i < len(mes) && mes[i] != 10 {
+		i++
+	}
+	i++
+	if i < len(mes) {
+		j := 0
+		for i < len(mes) && mes[i] != 0 {
+			key[j] = mes[i]
+			i++
+			j++
+
+		}
+		//fmt.Println(key)
+	}
+	return
+}
 
 // прием данных из сокета и вывод на печать
-func readSock(conn net.Conn, my_privateKey [32]byte, codes map[[256]byte][32]byte) {
+func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_priv [32]byte, my_pub [32]byte) {
 
 	if conn == nil {
 		panic("Connection is nil")
 	}
 	buf := make([]byte, 256)
-
-	//message := make([]byte, 256)
-	//their_key := make([]byte, 32)
 	eof_count := 0
 	for {
 		// чистим буфер
 		for i := 0; i < 256; i++ {
 			buf[i] = 0
-
 		}
 
 		readed_len, err := conn.Read(buf)
@@ -72,125 +142,112 @@ func readSock(conn net.Conn, my_privateKey [32]byte, codes map[[256]byte][32]byt
 			panic(err.Error())
 		}
 		if readed_len > 0 {
-			//		fmt.Println("MESSAGE")
+			line := string(buf)
+			//ind := strings.Index(line, "@")
+			if line[0] == '@' {
 
-			/*	if (buf[0] == 227)||(buf[0]==64) {
-				var friend [256]byte
-				for i := 0; i < 256; i++ {
-					friend[i] = 0
+				var zero_buf [32]byte
+				name, mes := redMes(line)
+				_, ok := codes[name]
+				if ok && codes[name] != zero_buf {
 
-				}
-				var i = 0
-				for buf[i] != 64 {
-					i++
-				}
-				i++
-				var j = 0
-				for buf[i] != 13 && buf[i] != 32 && buf[i] != 33 && buf[i] != 63 && buf[i] != 46 && buf[i] != 44 {
-					friend[j] = buf[i]
-					j++
-					i++
-				}
-				_, ok := codes[friend]
-
-				if (buf[0]==227){
-					fmt.Println(227)
-				if ok {
-					delete(codes, friend)
-				}
 				} else {
-					fmt.Println(64)
 
-					if !ok {
-						i=0
-						//for buf[i]
-						//codes[friend]
-					} else {
-						//дешифровка
+					//codes[name]:=
+					//fmt.Println("HERE")
+
+					their_key := findKey(mes)
+					//fmt.Println(their_key)
+					//fmt.Println([]byte(line))
+					//fmt.Println(buf)
+					shared_key := createSharedKey(their_key, my_priv)
+					//fmt.Println(shared_key)
+					codes[name] = shared_key
+
+					i := 0
+					for buf[i] != 10 {
+						i++
 					}
+					i++
+					for i < len(buf) {
+						buf[i] = 0
+						i++
+					}
+					line = string(buf)
+					if !ok {
+						var dop string
+						dop = "\n" + string(my_pub[:])
+						mes := createMes(string(name[:]), dop)
+						//	fmt.Println(mes)
+						ch <- mes
+						//	fmt.Println(buf)
+						//	fmt.Println(line)
+
+					}
+					//fmt.Println(codes[name])
 				}
 
-
-			} */
-			fmt.Println(string(buf))
-
+			}
+			fmt.Println(line)
 		}
 
 	}
 }
 
-func readConsole(ch chan string, codes map[[256]byte][32]byte, my_publicKey [32]byte) {
+// ввод данных с консоли и вывод их в канал
+func readConsole(ch chan string, codes map[[32]byte][32]byte, my_pub [32]byte) {
 	for {
-
 		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-
 		if len(line) > 150 {
 			fmt.Println("Error: message is very lagre")
 			continue
 		}
-		result := strings.Index(line, "@")
-		//	fmt.Println(result)
-
-		if result != -1 { //кому-то
-			var friend [256]byte
-			buf := make([]byte, 256)
-			for i := 0; i < 256; i++ {
-				buf[i] = 0
-				friend[i] = 0
-			}
-			var i = result + 1
-			var j = 0
-			for line[i] != 13 && line[i] != 32 && line[i] != 33 && line[i] != 63 && line[i] != 46 && line[i] != 44 {
-				friend[j] = line[i]
-				j++
-				i++
-			}
-			//	fmt.Println(friend)
-
+		//		b := []byte(line)
+		//		fmt.Print(b)
+		ind := strings.Index(line, "@")
+		if ind != -1 { //кому-то
+			friend := findName(line, ind)
 			_, ok := codes[friend]
 			if ok {
 				//шифрование
-			} else { //сообщение в виде @user(пробел=32)<сообщение(13)><публичный ключ>
+			} else { //сообщение в виде @user(пробел=32)<сообщение(10)><публичный ключ>
+				var zero_buf [32]byte
+				codes[friend] = zero_buf
+				buf := []byte(line)
+				ln := len(buf)
+				buf[ln-1] = 0
+				buf[ln-2] = 10
+				bbuf := make([]byte, 183)
+				copy(bbuf, buf)
+				j := 0
+				for j < 183 && bbuf[j] != 0 {
+					j++
+				}
+				if j < 183 {
+					for i := 0; i < 32; i++ {
+						bbuf[j] = my_pub[i]
+						j++
+					}
+				}
 
-				buf[0] = 64
-				i := 0
-				for friend[i] != 0 {
-					buf[i+1] = friend[i]
-					i++
-				}
-				i++
-				buf[i] = 32
-				i++
-				//	fmt.Println(buf)
-				for j := 0; line[j] != 10; j++ {
-					//	fmt.Println(line[j])
-					buf[i] = line[j]
-					i++
-				}
-				//	fmt.Println(buf)
-				for j := 0; j < 32; j++ {
-					buf[i] = my_publicKey[j]
-					i++
-				}
-				//fmt.Println(buf)
-				line = string(buf)
-				//fmt.Println(my_publicKey)
-				//fmt.Println(buf)
-				//fmt.Println(line)
+				a := string(bbuf[:])
+				//fmt.Println(my_pub)
+				line = createMes(string(friend[:]), a)
+				//				fmt.Println([]byte(line))
+
 			}
-
 		}
-		//a := "ㅁㅁ" //227
 
 		out := line //[:len(line)-1] // убираем символ возврата каретки
-
+		//		fmt.Println([]byte(out))
 		ch <- out // отправляем данные в канал
 	}
 }
 
 func main() {
 	ch := make(chan string)
-
+	//local_ch := make(chan bool)
+	codes := make(map[[32]byte][32]byte, 1024)
 	defer close(ch) // закрываем канал при выходе из программы
 
 	conn, _ := net.Dial("tcp", "127.0.0.1:8081")
@@ -198,13 +255,10 @@ func main() {
 		panic("Connection is nil")
 
 	}
-	fmt.Print("Firstly, enter your username in less than 8 ch, please: \nDo not use the ' ', '!', '?', '.', ',', '@'\n>")
-	my_conns := make(map[[256]byte][32]byte, 1024)
-	var my_privateKey, my_publicKey [32]byte
-	my_publicKey, my_privateKey = createKeys() //my_publicKey, my_privateKey)
-
-	go readConsole(ch, my_conns, my_publicKey)
-	go readSock(conn, my_privateKey, my_conns)
+	fmt.Print("Firstly, enter your username, please: \nDo not use the ' ','@', '!', '?', '.', ','\n>")
+	my_pub, my_priv := createKeys()
+	go readConsole(ch, codes, my_pub)             //local_ch,
+	go readSock(ch, conn, codes, my_priv, my_pub) //local_ch,
 
 	for {
 		val, ok := <-ch
