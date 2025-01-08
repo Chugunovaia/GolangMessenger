@@ -144,7 +144,15 @@ func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_pri
 		if readed_len > 0 {
 			line := string(buf)
 			//ind := strings.Index(line, "@")
-			if line[0] == '@' {
+			if line[0] == 227 {
+				ind := strings.Index(line, "@")
+				name := findName(line, ind)
+				_, ok := codes[name]
+				if ok {
+					delete(codes, name)
+				}
+
+			} else if line[0] == '@' {
 
 				var zero_buf [32]byte
 				name, mes := redMes(line)

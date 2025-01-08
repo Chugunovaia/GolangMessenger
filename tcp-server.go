@@ -191,7 +191,7 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 						break
 					}
 				} else {
-					conn.Write([]byte("User does not exist or finished it's work. \n>"))
+					conn.Write([]byte("ㅁUser @" + friend + " does not exist or finished it's work. \n>"))
 				}
 			}
 		}
