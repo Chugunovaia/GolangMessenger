@@ -35,7 +35,7 @@ func createSharedKey(their_publicKey [32]byte, my_privateKey [32]byte) [32]byte 
 	curve25519.ScalarMult(&secret, &privKey, &pubKey) //общий ключ, он будет одинаковым у двоих пользователей благодаря ScalarBaseMult
 	return secret
 }
-func findName(line string, ind int) (name [32]byte) {
+func findName(line string, ind int) (name [32]byte) { //вычленяем имя в строке
 	i := ind + 1
 	j := 0
 
@@ -48,7 +48,7 @@ func findName(line string, ind int) (name [32]byte) {
 
 	return
 }
-func createMes(user string, line string) (out string) {
+func createMes(user string, line string) (out string) { //определенный формат сообщений для отправки
 	buf := make([]byte, 256)
 	buf[0] = 64
 	i := 0
@@ -77,7 +77,7 @@ func createMes(user string, line string) (out string) {
 
 	return
 }
-func redMes(line string) (name [32]byte, mes []byte) {
+func redMes(line string) (name [32]byte, mes []byte) { //различаем имя отрпавителя и сообщение
 	ind := 0
 	name = findName(line, ind)
 
@@ -93,7 +93,7 @@ func redMes(line string) (name [32]byte, mes []byte) {
 
 	return
 }
-func findKey(mes []byte) (key [32]byte) {
+func findKey(mes []byte) (key [32]byte) { //вычленяем из сообщения отправленный ключ
 	i := 0
 
 	for i < len(mes) && mes[i] != 10 {
@@ -171,7 +171,7 @@ func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_pri
 	buf := make([]byte, 256)
 	eof_count := 0
 	for {
-		// чистим буфер
+
 		for i := 0; i < 256; i++ {
 			buf[i] = 0
 		}
@@ -196,43 +196,42 @@ func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_pri
 			}
 			panic(err.Error())
 		}
-		if readed_len > 0 {
+		if readed_len > 0 { //пришло сообщение
 			line := string(buf)
-			//ind := strings.Index(line, "@")
-			if line[0] == 227 {
+
+			if line[0] == 227 { //если 227 - это сообщение о том что определенный пользователь больше не на связи
 				ind := strings.Index(line, "@")
-				name := findName(line, ind)
+				name := findName(line, ind) //определяем имя
 				_, ok := codes[name]
 				if ok {
-					delete(codes, name)
+					delete(codes, name) //удаляем из списка активных контактов
 				}
 
-			} else if line[0] == '@' {
+			} else if line[0] == '@' { //пришло личное сообщение
 				var zero_buf [32]byte
-				name, mes := redMes(line)
+				name, mes := redMes(line) //вычленяем из него отправителя и текст
 				var l byte = 0
 				mes = bytes.Trim(mes, string(l))
 
 				_, ok := codes[name]
-				if ok && codes[name] != zero_buf {
+				if ok && codes[name] != zero_buf { //пользователь есть в контактах
 					key := make([]byte, 32)
 					op := codes[name]
 					copy(key[:], op[:])
-
-					dop_line, err_d := decryptString(string(mes[:]), key)
+					dop_line, err_d := decryptString(string(mes[:]), key) //декодируем сообщение
 					if err_d != nil {
 						panic(err_d)
 					}
-					line = "@" + string(name[:]) + " ->>" + dop_line
+					line = "@" + string(name[:]) + " ->>" + dop_line //красиво выводим
 
-				} else {
+				} else { //у нас нет общего ключа шифрованием с пользователем
 
-					their_key := findKey(mes)
+					their_key := findKey(mes) //вычленяем из сообщения ключ
 
-					shared_key := createSharedKey(their_key, my_priv)
+					shared_key := createSharedKey(their_key, my_priv) //создаем общий ключ
 
 					codes[name] = shared_key
-
+					// форматируем сообщение для вывода
 					i := 0
 					for buf[i] != 10 {
 						i++
@@ -243,7 +242,8 @@ func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_pri
 						i++
 					}
 					line = string(buf)
-					if !ok {
+					//
+					if !ok { //если мы не отправляли абоненту свой публичный ключ - отправляем
 						var dop string
 						dop = "\n" + string(my_pub[:])
 						mes := createMes(string(name[:]), dop)
@@ -264,18 +264,17 @@ func readSock(ch chan string, conn net.Conn, codes map[[32]byte][32]byte, my_pri
 // ввод данных с консоли и вывод их в канал
 func readConsole(ch chan string, codes map[[32]byte][32]byte, my_pub [32]byte) {
 	for {
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n') //принимаем сообщение
 		if len(line) > 150 {
 			fmt.Println("Error: message is very lagre")
 			continue
 		}
 
 		ind := strings.Index(line, "@")
-		if ind != -1 { //кому-то
-			friend := findName(line, ind)
+		if ind != -1 { //если есть собака - личное сообщение, надо зашифровать
+			friend := findName(line, ind) //определяем имя получателя
 			_, ok := codes[friend]
-			if ok {
-				//шифрование
+			if ok { //если получатель в списке контактов - шифруем сообщение
 				key := make([]byte, 32)
 				op := codes[friend]
 				copy(key[:], op[:])
@@ -286,15 +285,16 @@ func readConsole(ch chan string, codes map[[32]byte][32]byte, my_pub [32]byte) {
 					panic(err_d)
 				}
 
-				line = createMes(string(friend[:]), dop_line)
+				line = createMes(string(friend[:]), dop_line) //и форматируем так, чтобы сервер смог определить получателя
 
-			} else { //сообщение в виде @user(пробел=32)<сообщение(10)><публичный ключ>
+			} else { //получатель не в списке контактов - отпраляем сообщение в виде @user(пробел=32)<сообщение(10)><публичный ключ>
 				var zero_buf [32]byte
 				codes[friend] = zero_buf
 				buf := []byte(line)
 				ln := len(buf)
 				buf[ln-1] = 0
 				buf[ln-2] = 10
+				//формируем сообщение из текста и ключа
 				bbuf := make([]byte, 183)
 				copy(bbuf, buf)
 				j := 0
@@ -309,21 +309,20 @@ func readConsole(ch chan string, codes map[[32]byte][32]byte, my_pub [32]byte) {
 				}
 
 				a := string(bbuf[:])
-
-				line = createMes(string(friend[:]), a)
+				//
+				line = createMes(string(friend[:]), a) //форматируем сообщение
 
 			}
 		}
 
-		out := line //[:len(line)-1] // убираем символ возврата каретки
+		out := line
 
 		ch <- out // отправляем данные в канал
 	}
 }
 
-func main() {
-	ch := make(chan string)
-	//local_ch := make(chan bool)
+func client() {
+	ch := make(chan string) //сщздаем канал
 	codes := make(map[[32]byte][32]byte, 1024)
 	defer close(ch) // закрываем канал при выходе из программы
 
@@ -333,14 +332,14 @@ func main() {
 
 	}
 	fmt.Print("Firstly, enter your username, please: \nDo not use the ' ','@', '!', '?', '.', ','\n>")
-	my_pub, my_priv := createKeys()
-	go readConsole(ch, codes, my_pub)             //local_ch,
-	go readSock(ch, conn, codes, my_priv, my_pub) //local_ch,
+	_, _ = bufio.NewReader(os.Stdin).ReadString('\n') //убираем все лишнее с консоли
+	my_pub, my_priv := createKeys()                   //генерируем личный и приватный ключ для пользователя
+	go readConsole(ch, codes, my_pub)                 //в отдельных горутинах одновременно и принимаем и отправляем сообщения
+	go readSock(ch, conn, codes, my_priv, my_pub)
 
 	for {
 		val, ok := <-ch
 		if ok { // если есть данные, то их пишем в сокет
-			// val_len := len(val)
 			out := []byte(val)
 			_, err := conn.Write(out)
 			if err != nil {

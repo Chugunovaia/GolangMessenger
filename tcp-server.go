@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func sentmessage(message string, username string) []byte {
+func sentmessage(message string, username string) []byte { //поределенный формат вывода сообщения
 	builded := &strings.Builder{}
 	plus_buf := make([]byte, 256)
 	builded.WriteString(" ->>")
@@ -60,7 +60,8 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 			buf[i] = 0
 		}
 
-		_, err := conn.Read(buf)
+		_, err := conn.Read(buf) //читаем сообщение от абонента
+		fmt.Println(string(buf))
 		if err != nil {
 			if err.Error() == "EOF" {
 				fmt.Println("Close ")
@@ -71,7 +72,7 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 			if ok {
 				delete(conns, username)
 				for _, connection := range conns {
-					out_buf := []byte("ㅁUser @" + username + " finished their work")
+					out_buf := []byte("ㅁUser @" + username + " finished their work") //если появилась ошибка, значит абонент ушел => информируем остальных и убираем из списка абонентов
 					_, err2 := connection.Write(out_buf)
 					if err2 != nil {
 						fmt.Println("Error:", err2.Error())
@@ -86,7 +87,7 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 
 		message = string(buf)
 
-		if un_flag == false {
+		if un_flag == false { //если ложь, значит мы читаем имя абонента
 
 			b := make([]byte, 32)
 
@@ -95,12 +96,15 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 			}
 			username = string(b)
 			_, ok := conns[username]
+
 			if ok {
 				conn.Write([]byte("This username already exists. Please, enter different one:\n>"))
 
 			} else if strings.Contains(username, "@") || strings.Contains(username, " ") || strings.Contains(username, ",") || strings.Contains(username, ".") || strings.Contains(username, "!") || strings.Contains(username, "?") {
 
 				conn.Write([]byte("Used the forbidden symbol:\n>"))
+			} else if buf[0] == 13 || buf[0] == 10 {
+				conn.Write([]byte("You must use at least 1 symbol\n>"))
 			} else {
 				conn.Write([]byte("Username accepted: " + username + "\n"))
 
@@ -111,8 +115,8 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 				un_flag = true
 			}
 		} else {
-			result := strings.Index(message, "@")
-			if result == -1 {
+			result := strings.Index(message, "@") //просматриваем, есть ли в сообщении @
+			if result == -1 {                     // если нет - рассылаем его всем абонентам
 
 				for _, connection := range conns {
 					out_buf := []byte(message)
@@ -123,9 +127,9 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 					}
 
 				}
-			} else {
+			} else { //если есть - отправляем одному абоненту
 				friend_buf := make([]byte, 32)
-				var friend = ""
+				var friend = "" //вычленяем имя получателя
 				for i := result; i < 256; i++ {
 					if buf[i] == 64 {
 						i++
@@ -140,11 +144,11 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 
 					}
 				}
-				friend = string(friend_buf)
+				friend = string(friend_buf) //
 
 				_, ok := conns[friend]
 
-				if ok {
+				if ok { //если получатель есть в списке абонентов - отправляем
 
 					out_buf := sentmessage(message, username)
 
@@ -153,7 +157,7 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 						fmt.Println("Error:", err2.Error())
 						break
 					}
-				} else {
+				} else { //если нет - информируем отправителя
 					conn.Write([]byte("ㅁUser @" + friend + " does not exist or finished it's work. \n>"))
 				}
 			}
@@ -163,12 +167,11 @@ func nick(conn net.Conn, conns map[string]net.Conn, un_flag bool) {
 
 }
 
-func main() {
-
+func server() {
 	fmt.Println("Start server...")
 
 	count_of_conns := 0
-	my_conns := make(map[string]net.Conn, 1024)
+	my_conns := make(map[string]net.Conn, 1024) //хранение всех абонентов
 
 	ln, _ := net.Listen("tcp", ":8081")
 
@@ -177,7 +180,7 @@ func main() {
 		if count_of_conns < 1024 {
 			conn, _ := ln.Accept()
 
-			go nick(conn, my_conns, false)
+			go nick(conn, my_conns, false) //обработка нового абонента
 
 			count_of_conns = len(my_conns)
 
