@@ -1,5 +1,5 @@
 # GolangMessenger
-Мессенджер с шифрованием. (Базовый в branch base).
+Мессенджер с шифрованием. (Базовый в branch base cделан на основе туториала + дополнительные изменения по тз https://proglib.io/p/pishem-messendzher-na-go-za-chas-7-prostyh-shagov-ot-eho-servera-k-asinhronnomu-obmenu-soobshcheniyami-2021-09-07).
 Если писать личное сообщение: 
 1) 1 сообщение не шифруется и передает публичный ключ 1 юзера 2, 
 2) после получения 2 юзер передает свой публичный ключ 1 юзеру
