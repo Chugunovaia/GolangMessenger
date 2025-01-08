@@ -5,8 +5,13 @@
 2) после получения 2 юзер передает свой публичный ключ 1 юзеру
 3) у них путем умножения своего приватного ключа на публичный ключ другого получается одинаковый общий ключ.
    (Взяла из статьи: https://habr.com/ru/articles/437686/)
+   
 Потом происходит шифрование AES 256. (Взяла отсюда: https://bytegoblin.io/blog/aes-encryption-and-decryption-in-golang-php-and-both-with-full-codes.mdx)
+
 Нет GUI.
+
 Для запуска:
+
 Сперва запускаем сервер: go run tcp-server.go (windows)
+
 После этого запускаем клиента: go run tcp-client.go (windows)
